@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Messaging
+
+Globals:
+  Function:
+    Timeout: 15
+    MemorySize: 512
+    Runtime: dotnet6
+    Architectures:
+      - x86_64
+
+Resources:
+  SQSQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: "mySqsQueue"
+
+  SQSSubscriptionQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: "mySubscriptionSqsQueue"
+
+  SQSFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: dotnet6
+      Handler: SQSTrigger::SQSTrigger.Function::FunctionHandler
+      CodeUri: ./src/SQSTrigger/
+      Policies:  
+        - SQSPollerPolicy:
+            QueueName: !GetAtt SQSQueue.QueueName
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt SQSQueue.Arn
+            BatchSize: 10
+        SNSEvent:
+          Type: SNS
+          Properties:
+            Topic: !Ref SNSTopic
+            SqsSubscription:
+              BatchSize: 10
+              QueueArn: !GetAtt SQSSubscriptionQueue.Arn
+              QueueUrl: !Ref SQSSubscriptionQueue
+              Enabled: true
+
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: "mySNSTopic"
+
+  SNSFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: dotnet6
+      Handler: SNSTrigger::SNSTrigger.Function::FunctionHandler
+      CodeUri: ./src/SNSTrigger/
+      Events:
+        SNSEvent:
+          Type: SNS
+          Properties:
+            Topic: !Ref SNSTopic
+
+Outputs:
+  SQSConsumerFunction:
+    Description: SQS consumer function name
+    Value: !Ref SQSFunction
+
+  SNSConsumerFunction:
+    Description: SNS consumer function name
+    Value: !Ref SNSFunction
